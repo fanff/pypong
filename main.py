@@ -1,6 +1,6 @@
 import logging
 import time
-
+import numpy as np
 import pygame
 from pygame.font import SysFont
 
@@ -76,26 +76,56 @@ class Pong():
 
         self.net_start = screen_h // 10
 
+
         self.gamezone_h = screen_h - self.net_start
+        self.gamezone_w = screen_w
+
+
+        self.mid_w = screen_w // 2
+
 
         self.score_pl = 0
         self.score_pr = 0
 
         self.left_paddle = .5
-        self.right_paddle = .5
+        self.left_paddle_velocity = 0
 
-        self.ball_x = .3
-        self.ball_y = .3
-        import numpy as np
-        self.ball_velocity = np.
+        self.right_paddle = .5
+        self.right_paddle_velocity = 0
+
+        self.max_paddle_velocity = 0.03
+
+        self.paddle_accel = 0.015
+
+        self.paddle_relative_extend = .1
+
+        self.ball_loc = None
+        self.ball_velocity = None
+
+        self.init_ball_spd_factor=.01
+
+        self.ball_spd_factor = self.init_ball_spd_factor
+
+
+        self.ball_width = self.gamezone_w // 50
+        self.ball_half_width = self.ball_width // 2
+
+        self.round_frame = 0
+        self.round_started = False
 
         self.current_game_mode = GM_MENU
         self.previous_game_mode = GM_MENU
         self.game_events=[]
 
-        self.slide_paddle_speed = .01
+
 
         self.paddle_state:set = set()
+
+    @property
+    def ball_x(self): return self.ball_loc[0]
+
+    @property
+    def ball_y(self): return self.ball_loc[1]
 
     def init(self):
         pygame.init()
@@ -154,13 +184,11 @@ class Pong():
 
                     case pygame.KEYDOWN, "up":
                         self.paddle_state.add(PS_P1_UP)
-                        self.paddle_state.discard(PS_P1_DOWN)
                     case pygame.KEYUP, "up":
                         self.paddle_state.discard(PS_P1_UP)
 
                     case pygame.KEYDOWN, "down":
                         self.paddle_state.add(PS_P1_DOWN)
-                        self.paddle_state.discard(PS_P1_UP)
                     case pygame.KEYUP, "down":
                         self.paddle_state.discard(PS_P1_DOWN)
 
@@ -190,31 +218,144 @@ class Pong():
             self.game_events = []
             
             # paddle moves
-            if PS_P1_UP in self.paddle_state:
-                self.right_paddle -= self.slide_paddle_speed
-            elif PS_P1_DOWN in self.paddle_state:
-                self.right_paddle += self.slide_paddle_speed
 
-            if PS_P2_UP in self.paddle_state:
-                self.left_paddle -= self.slide_paddle_speed
-            elif PS_P2_DOWN in self.paddle_state:
-                self.left_paddle += self.slide_paddle_speed
+            # recalc paddle velocities (wtf)
 
-            paddle_extend = .05
-            self.right_paddle = min(self.right_paddle, 1.0-paddle_extend)
-            self.right_paddle = max(self.right_paddle, paddle_extend)
 
-            self.left_paddle = min(self.left_paddle, 1.0-paddle_extend)
-            self.left_paddle = max(self.left_paddle, paddle_extend)
+            #right paddle
+            if (PS_P1_UP not in self.paddle_state) and (PS_P1_DOWN not in self.paddle_state):
+                self.right_paddle_velocity = self.right_paddle_velocity *0.7
+            else:
+                if not self.round_started and self.round_started_right:
+                    self.round_started = True
+
+                if PS_P1_UP in self.paddle_state:
+                    self.right_paddle_velocity -=self.paddle_accel
+
+                if PS_P1_DOWN in self.paddle_state:
+                    self.right_paddle_velocity += self.paddle_accel
+
+
+            if self.right_paddle_velocity >self.max_paddle_velocity:
+                self.right_paddle_velocity = self.max_paddle_velocity
+            elif self.right_paddle_velocity < - self.max_paddle_velocity:
+                self.right_paddle_velocity = - self.max_paddle_velocity
+
+
+            self.right_paddle += self.right_paddle_velocity
+
+            # left paddle
+            if (PS_P2_UP not in self.paddle_state) and (PS_P2_DOWN not in self.paddle_state):
+                self.left_paddle_velocity = self.left_paddle_velocity *0.7
+            else:
+                if not self.round_started and not self.round_started_right:
+                    self.round_started = True
+
+                if PS_P2_UP in self.paddle_state:
+
+                    self.left_paddle_velocity -= self.paddle_accel
+                elif PS_P2_DOWN in self.paddle_state:
+                    self.left_paddle_velocity += self.paddle_accel
+
+            if self.left_paddle_velocity >self.max_paddle_velocity:
+                self.left_paddle_velocity = self.max_paddle_velocity
+            elif self.left_paddle_velocity < - self.max_paddle_velocity:
+                self.left_paddle_velocity = - self.max_paddle_velocity
+
+            self.left_paddle += self.left_paddle_velocity
+
+
+            self.right_paddle = min(self.right_paddle, 1.0 - self.paddle_relative_extend)
+            self.right_paddle = max(self.right_paddle, self.paddle_relative_extend)
+
+            self.left_paddle = min(self.left_paddle, 1.0 - self.paddle_relative_extend)
+            self.left_paddle = max(self.left_paddle, self.paddle_relative_extend)
 
             # ball moves
-            
-            
+            if self.round_started:
+                self.round_frame +=1
 
 
+
+            if self.round_frame == 5:
+                paddle_toball_velocity = 5
+
+                if self.round_started_right:
+                    self.ball_velocity = np.array([-1,self.right_paddle_velocity*paddle_toball_velocity])
+                else:
+                    self.ball_velocity = np.array([1,self.left_paddle_velocity*paddle_toball_velocity])
+
+            else:
+                self.ball_loc = self.ball_loc+self.ball_velocity *self.ball_spd_factor
+
+                ball_relative_thinkness = self.ball_half_width/self.gamezone_h
+                if self.ball_y< ball_relative_thinkness:
+                    self.ball_velocity[1] = np.abs(self.ball_velocity[1])
+                elif self.ball_y>1-ball_relative_thinkness:
+                    self.ball_velocity[1] = - np.abs(self.ball_velocity[1])
+
+                if self.ball_x< ball_relative_thinkness:
+                    if self.in_paddle_left():
+                        dist_tocenter = abs(self.left_paddle - self.ball_y )/(self.paddle_relative_extend)
+
+                        print(dist_tocenter)
+                        self.ball_velocity[0] = np.abs(self.ball_velocity[0])
+
+                        self.ball_velocity = self.ball_velocity * (1.0 + (dist_tocenter)/10)
+                    else:
+
+                        #credit score paddle_right
+                        self.score_pr += 1
+                        # reinit round
+                        self.new_round_2P_game()
+
+                elif self.ball_x>1-ball_relative_thinkness:
+
+                    if self.in_paddle_right():
+                        self.ball_velocity[0] = - np.abs(self.ball_velocity[0])
+                    else:
+
+                        #credit score
+                        self.score_pl += 1
+                        self.new_round_2P_game(right=False)
+
+
+
+    def in_paddle_right(self):
+        return self.right_paddle -self.paddle_relative_extend < self.ball_y <self.right_paddle +self.paddle_relative_extend
+
+    def in_paddle_left(self):
+        return self.left_paddle - self.paddle_relative_extend < self.ball_y < self.left_paddle + self.paddle_relative_extend
+    def re_init_2P_game(self):
+        self.score_pl = 0
+        self.score_pr = 0
+
+        self.right_paddle = .5
+        self.left_paddle = .5
+
+
+
+        self.ball_spd_factor = self.init_ball_spd_factor
+        self.new_round_2P_game(right=True)
+
+
+    def new_round_2P_game(self, right=True):
+
+        ball_init_shift = (self.ball_half_width / self.gamezone_w)*3
+        self.round_started = False
+        self.round_started_right = right
+        if right :
+
+            self.ball_loc = np.array([(1.0-ball_init_shift),self.right_paddle])
+            self.ball_velocity = np.array([0.0,0.0])
+        else:
+
+            self.ball_loc = np.array([( ball_init_shift), self.left_paddle])
+            self.ball_velocity = np.array([0.0, 0.0])
+        self.round_frame = 0
     def render(self):
 
-        render_background(self.screen)
+        self.render_background()
         self.render_score()
 
         self.render_paddles()
@@ -282,59 +423,59 @@ class Pong():
 
     def render_score(self):
 
-        mid_w = screen_w // 2
+
 
         lscore = self.score_font.render("%d" % self.score_pl, 1, WHITE)
         lscore_rect = lscore.get_rect()
 
         rscore = self.score_font.render("%d" % self.score_pr, 1, WHITE)
 
-        self.screen.blit(lscore, (mid_w - lscore_rect[2] - 10, 0))
-        self.screen.blit(rscore, (mid_w + 10, 0))
+        self.screen.blit(lscore, (self.mid_w - lscore_rect[2] - 10, 0))
+        self.screen.blit(rscore, (self.mid_w + 10, 0))
 
     def render_paddles(self):
 
-        paddle_height = self.gamezone_h // 7
+        paddle_height = int(self.gamezone_h * self.paddle_relative_extend*2)
         paddle_half_height = paddle_height // 2
-        paddle_width = screen_w // 80
+        paddle_width = self.ball_half_width
 
         pygame.draw.rect(self.screen, WHITE, (
-        0, self.net_start + self.gamezone_h * self.left_paddle - paddle_half_height, paddle_width, paddle_height))
+        0, self.net_start + (self.left_paddle*self.gamezone_h) - paddle_half_height,
+
+        paddle_width, paddle_height))
 
         pygame.draw.rect(self.screen, WHITE, (
         screen_w - paddle_width, self.net_start + self.gamezone_h * self.right_paddle - paddle_half_height,
         paddle_width, paddle_height))
 
     def render_ball(self):
-        ball_width = screen_w // 50
-        ball_half_width = ball_width // 2
+
 
         ballw = self.ball_x * screen_w
-        ballh = self.ball_y * self.gamezone_h
+        ballh = self.net_start+  self.ball_y * self.gamezone_h
 
-        pygame.draw.rect(self.screen, WHITE, (ballw - ball_half_width, ballh - ball_half_width
-                                              , ball_width, ball_width))
+        pygame.draw.rect(self.screen, WHITE, (ballw - self.ball_half_width, ballh - self.ball_half_width
+                                              , self.ball_width, self.ball_width))
 
 
-def render_background(screen):
-    pygame.draw.rect(screen, BLACK, (0, 0, screen_w, screen_h))
+    def render_background(self):
+        pygame.draw.rect(self.screen, BLACK, (0, 0, screen_w, screen_h))
 
-    mid_w = screen_w // 2
+        pygame.draw.rect(self.screen, LIGHT_GREY, (0, self.net_start, screen_w, self.gamezone_h),width=2)
 
-    net_w = screen_w // 70
-    net_h = screen_h // 15
-    netgap = net_h // 2
 
-    net_start = screen_h // 10
+        net_w = screen_w // 70
+        net_h = screen_h // 15
+        netgap = net_h // 2
 
-    i = 0
-    drawnet = True
-    while drawnet:
-        net_start_at = net_start + i * (net_h + netgap)
-        if net_start_at > screen_h:
-            break
-        pygame.draw.rect(screen, LIGHT_GREY, (mid_w - net_w // 2, net_start_at, net_w, net_h))
-        i += 1
+        i = 0
+        drawnet = True
+        while drawnet:
+            net_start_at = self.net_start + i * (net_h + netgap)
+            if net_start_at > screen_h:
+                break
+            pygame.draw.rect(self.screen, LIGHT_GREY, (self.mid_w - net_w // 2, net_start_at, net_w, net_h))
+            i += 1
 
 
 def render_overlay(screen, game):
@@ -345,7 +486,7 @@ def render_overlay(screen, game):
 def main():
     game = Pong()
     game.init()
-    game.debug_events = True
+    game.debug_events = False
     game.debug_overlay = True
 
     target_loop_duration = 1.0 / 60
@@ -372,15 +513,10 @@ def apply_solo(game:Pong):
     pass
     # start solo game
     # game.current_game_mode = GM_ONE_PLAYER
-def apply_2_Players(game:Pong):
-
-    game.score_pl = 0
-    game.score_pr = 0
-
-    game.right_paddle = .5
-    game.left_paddle = .5
-
-    game.current_game_mode = GM_TWO_PLAYER
+def apply_2_Players(self:Pong):
+    # right start
+    self.re_init_2P_game()
+    self.current_game_mode = GM_TWO_PLAYER
 
 def apply_quit(game):
     game.running = False
