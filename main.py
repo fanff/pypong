@@ -18,6 +18,38 @@ GM_ONE_PLAYER = 2
 GM_TWO_PLAYER = 3
 
 
+PS_P1_UP = 1
+PS_P1_DOWN = 2
+
+PS_P2_UP = 3
+PS_P2_DOWN = 4
+
+
+class Menu:
+
+    def __init__(self,content,menu_fonctions):
+        self.content = content
+        self.current_item = 0
+        self.functions = menu_fonctions
+
+
+    def __len__(self): return len(self.content)
+
+    def item_down(self):
+        self.current_item = (self.current_item + 1 ) % len(self)
+    def item_up(self):
+        self.current_item = (self.current_item - 1 + len(self)) % len(self)
+
+    def render_menu(self,game):
+        pass
+
+
+
+
+
+pause_menu_content = ["Resume","Quit"]
+
+
 def print_debug(screen, txt):
     f = SysFont("Arial", 12)
     s = f.render(txt, 1, DEBUG_COL)
@@ -27,8 +59,7 @@ def print_debug(screen, txt):
     screen.blit(s, (0, 0))
 
 
-menu_content = ["Solo", "2 Players", "Quit"]
-pause_menu_content = ["resume","quit"]
+
 
 class Pong():
 
@@ -41,7 +72,7 @@ class Pong():
         self.screen = None
         self.loop_duration = 0.0001
 
-        self.score_font = None
+        self.score_font:SysFont = None
 
         self.net_start = screen_h // 10
 
@@ -55,13 +86,16 @@ class Pong():
 
         self.ball_x = .3
         self.ball_y = .3
+        import numpy as np
+        self.ball_velocity = np.
 
         self.current_game_mode = GM_MENU
-
-        menu_item_selected = 0
-
-
+        self.previous_game_mode = GM_MENU
         self.game_events=[]
+
+        self.slide_paddle_speed = .01
+
+        self.paddle_state:set = set()
 
     def init(self):
         pygame.init()
@@ -70,7 +104,14 @@ class Pong():
 
         # pygame.display.set_icon(logo)
         pygame.display.set_caption("Fanf's Pong")
+
+
         self.screen = pygame.display.set_mode((screen_w, screen_h), )
+
+        self.mid_w = screen_w // 2
+        self.mid_h = screen_h // 2
+
+
 
     def hande_event(self):
         # event handling, gets all event from the event queue
@@ -82,17 +123,94 @@ class Pong():
             else:
                 if self.debug_events:
                     self.log.debug(event)
-                if event.type == pygame.KEYDOWN:
-
-                    pygame.KEYDOWN
+                if event.type in [pygame.KEYDOWN,pygame.KEYUP]:
                     key_name = pygame.key.name(event.key)
                     # up or down
-                    if key_name in ["up","down","return"]:
-                        self.game_events.append(("down",key_name))
+                    if key_name in ["up","down","return","x","s"]:
+                        self.game_events.append((event.type,key_name))
 
                     pass
     def update(self):
-        pass
+
+
+        if self.current_game_mode in [GM_MENU,GM_PAUSED]:
+            current_menu = menu_gm[self.current_game_mode]
+
+            for evt in self.game_events:
+                match evt:
+                    case pygame.KEYDOWN, "up":
+                        current_menu.item_up()
+                    case pygame.KEYDOWN, "down":
+                        current_menu.item_down()
+                    case pygame.KEYDOWN, "return":
+
+                        current_menu.functions[current_menu.current_item](self)
+            self.game_events = []
+
+        elif self.current_game_mode in [GM_TWO_PLAYER,GM_ONE_PLAYER]:
+            remain = []
+            for evt in self.game_events:
+                match evt:
+
+                    case pygame.KEYDOWN, "up":
+                        self.paddle_state.add(PS_P1_UP)
+                        self.paddle_state.discard(PS_P1_DOWN)
+                    case pygame.KEYUP, "up":
+                        self.paddle_state.discard(PS_P1_UP)
+
+                    case pygame.KEYDOWN, "down":
+                        self.paddle_state.add(PS_P1_DOWN)
+                        self.paddle_state.discard(PS_P1_UP)
+                    case pygame.KEYUP, "down":
+                        self.paddle_state.discard(PS_P1_DOWN)
+
+                    case pygame.KEYDOWN, "s":
+                        self.paddle_state.add(PS_P2_UP)
+                        self.paddle_state.discard(PS_P2_DOWN)
+                    case pygame.KEYUP, "s":
+                        self.paddle_state.discard(PS_P2_UP)
+
+                    case pygame.KEYDOWN, "x":
+                        self.paddle_state.add(PS_P2_DOWN)
+                        self.paddle_state.discard(PS_P2_UP)
+                    case pygame.KEYUP, "x":
+                        self.paddle_state.discard(PS_P2_DOWN)
+
+
+                    case pygame.KEYDOWN, "return":
+
+                        self.previous_game_mode = self.current_game_mode
+                        self.current_game_mode = GM_PAUSED
+
+
+
+                    case _:
+                        remain.append(evt)
+
+            self.game_events = []
+            
+            # paddle moves
+            if PS_P1_UP in self.paddle_state:
+                self.right_paddle -= self.slide_paddle_speed
+            elif PS_P1_DOWN in self.paddle_state:
+                self.right_paddle += self.slide_paddle_speed
+
+            if PS_P2_UP in self.paddle_state:
+                self.left_paddle -= self.slide_paddle_speed
+            elif PS_P2_DOWN in self.paddle_state:
+                self.left_paddle += self.slide_paddle_speed
+
+            paddle_extend = .05
+            self.right_paddle = min(self.right_paddle, 1.0-paddle_extend)
+            self.right_paddle = max(self.right_paddle, paddle_extend)
+
+            self.left_paddle = min(self.left_paddle, 1.0-paddle_extend)
+            self.left_paddle = max(self.left_paddle, paddle_extend)
+
+            # ball moves
+            
+            
+
 
     def render(self):
 
@@ -102,9 +220,9 @@ class Pong():
         self.render_paddles()
 
         if self.current_game_mode == GM_MENU:
-            self.render_menu()
+            self.render_menu(main_menu)
         elif self.current_game_mode == GM_PAUSED:
-            self.render_paused_menu()
+            self.render_menu(pause_menu)
         else:
             self.render_ball()
 
@@ -113,21 +231,53 @@ class Pong():
 
         pygame.display.update()
 
-    def render_menu(self):
+    def render_menu(self,menu:Menu):
+
+        img_menu = [(idx,rend,rend.get_rect()[2:])
+            for idx,rend in [(idx, self.menu_font.render(k, 1, WHITE,BLACK) )
+                for idx,k in enumerate(menu.content)]]
+
+        max_line_w = max(line_w for idx, rend, (line_w, line_h) in img_menu)
+
+        menu_h = img_menu[0][-1][-1]
+        menu_h = menu_h*len(img_menu) + menu_h//2 *(  len(img_menu)-1)
+
+        menu_top = self.mid_h - menu_h//2
+
+        menu_left = int(self.mid_w - max_line_w//2)
+
+        menu_extend = int(max(max_line_w,menu_h)*.3)
+        menu_extend2 = menu_extend*2
+
+        pygame.draw.rect(self.screen, BLACK,
+                         (menu_left-menu_extend, menu_top-menu_extend, max_line_w+menu_extend2, menu_h+menu_extend2),
+                         width=0)
+
+        pygame.draw.rect(self.screen, LIGHT_GREY, (
+            menu_left-menu_extend, menu_top-menu_extend, max_line_w+menu_extend2, menu_h+menu_extend2),
+                         width=menu_extend//6)
 
 
 
-        menuStrs = [k if idx != self.menu_item_selected else f"> {k} <"
-                    for idx,k in enumerate(menu_content) ]
-        fullTxt = "\n\r".join(menuStrs)
+        for idx,rend,(line_w,line_h) in img_menu:
 
-        menubuff = self.score_font.render(fullTxt, 1, WHITE)
-        menu_x,menu_y,menu_w,menu_h = menubuff.get_rect()
+            at_h = int(menu_top + (idx * (line_h * 1.5)))
+            at_w = self.mid_w - line_w//2
 
-        mid_w = screen_w // 2
-        mid_h = screen_h // 2
+            self.screen.blit(rend, (at_w, at_h ))
 
-        self.screen.blit(menubuff, (mid_w - menu_w//2, mid_h - menu_h//2))
+            if idx == menu.current_item:
+                pygame.draw.rect(self.screen, WHITE,
+                                 (at_w - menu_extend//2, at_h ,
+                                  menu_extend//6,line_h),
+                                 width=0)
+
+                pygame.draw.rect(self.screen, WHITE,
+                                 (at_w + line_w + menu_extend // 2, at_h,
+                                  menu_extend // 6, line_h),
+                                 width=0)
+
+
 
 
     def render_score(self):
@@ -215,8 +365,50 @@ def main():
         game.loop_duration = time.time() - st
 
 
+
+
+
+def apply_solo(game:Pong):
+    pass
+    # start solo game
+    # game.current_game_mode = GM_ONE_PLAYER
+def apply_2_Players(game:Pong):
+
+    game.score_pl = 0
+    game.score_pr = 0
+
+    game.right_paddle = .5
+    game.left_paddle = .5
+
+    game.current_game_mode = GM_TWO_PLAYER
+
+def apply_quit(game):
+    game.running = False
+
+
+def apply_resume(game:Pong):
+    game.current_game_mode = game.previous_game_mode
+    game.previous_game_mode = GM_MENU
+
+def apply_endgame(game):
+    game.current_game_mode = GM_MENU
+
+
+main_menu = Menu(content=["Solo", "2 Players", "Quit"],
+                menu_fonctions = [
+                    apply_solo,apply_2_Players,apply_quit
+                ]
+)
+
+pause_menu = Menu(content=["Resume","Quit"],
+                 menu_fonctions=[
+                     apply_resume, apply_endgame
+                 ]
+
+                 )
+
+menu_gm = {GM_MENU:main_menu,GM_PAUSED:pause_menu}
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     main()
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
