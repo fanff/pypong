@@ -146,9 +146,9 @@ class Pong():
         pygame.display.set_caption("Fanf's Pong")
 
         #
-        self.screen = pygame.display.set_mode((screen_w, screen_h),pygame.FULLSCREEN )
-
-        # pygame.SHOWN
+        #self.screen = pygame.display.set_mode((screen_w, screen_h),pygame.FULLSCREEN )
+        self.screen = pygame.display.set_mode((screen_w, screen_h), pygame.SHOWN)
+        #
 
         self.mid_w = screen_w // 2
         self.mid_h = screen_h // 2
@@ -209,14 +209,16 @@ class Pong():
                         self.paddle_state.discard(PS_P1_DOWN)
 
                     case pygame.KEYDOWN, "s":
-                        self.paddle_state.add(PS_P2_UP)
-                        self.paddle_state.discard(PS_P2_DOWN)
+                        if GM_TWO_PLAYER:
+                            self.paddle_state.add(PS_P2_UP)
+                            self.paddle_state.discard(PS_P2_DOWN)
                     case pygame.KEYUP, "s":
-                        self.paddle_state.discard(PS_P2_UP)
+                            self.paddle_state.discard(PS_P2_UP)
 
                     case pygame.KEYDOWN, "x":
-                        self.paddle_state.add(PS_P2_DOWN)
-                        self.paddle_state.discard(PS_P2_UP)
+                        if GM_TWO_PLAYER:
+                            self.paddle_state.add(PS_P2_DOWN)
+                            self.paddle_state.discard(PS_P2_UP)
                     case pygame.KEYUP, "x":
                         self.paddle_state.discard(PS_P2_DOWN)
 
@@ -231,8 +233,23 @@ class Pong():
                     case _:
                         remain.append(evt)
 
+
             self.game_events = []
-            
+
+            if self.current_game_mode == GM_ONE_PLAYER:
+                # play AI
+                self.paddle_state.discard(PS_P2_DOWN)
+                self.paddle_state.discard(PS_P2_UP)
+
+                if self.round_frame <= 12:
+                    self.paddle_state.add(PS_P2_UP)
+                else:
+                    if self.left_paddle < self.ball_y:
+                        self.paddle_state.add(PS_P2_DOWN)
+                    else :
+                        self.paddle_state.add(PS_P2_UP)
+
+
             # paddle moves
 
             # recalc paddle velocities
@@ -534,10 +551,11 @@ def main():
 
 
 
-def apply_solo(game:Pong):
+def apply_solo(self:Pong):
     pass
     # start solo game
-    # game.current_game_mode = GM_ONE_PLAYER
+    self.re_init_2P_game()
+    self.current_game_mode = GM_ONE_PLAYER
 def apply_2_Players(self:Pong):
     # right start
     self.re_init_2P_game()
