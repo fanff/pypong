@@ -121,6 +121,12 @@ class Pong():
 
         self.paddle_state:set = set()
 
+        self.sound_bank = {}
+
+
+
+
+
     @property
     def ball_x(self): return self.ball_loc[0]
 
@@ -132,11 +138,17 @@ class Pong():
         self.score_font = SysFont("monospace", 30)
         self.menu_font = SysFont("monospace", 30)
 
+        self.sound_bank = {"bip": pygame.mixer.Sound('assets/fx13.wav'),
+                           "bop": pygame.mixer.Sound('assets/fx16.wav'),
+                           "bup": pygame.mixer.Sound('assets/fx22.wav'), }
+
         # pygame.display.set_icon(logo)
         pygame.display.set_caption("Fanf's Pong")
 
+        #
+        self.screen = pygame.display.set_mode((screen_w, screen_h),pygame.FULLSCREEN )
 
-        self.screen = pygame.display.set_mode((screen_w, screen_h), )
+        # pygame.SHOWN
 
         self.mid_w = screen_w // 2
         self.mid_h = screen_h // 2
@@ -169,10 +181,14 @@ class Pong():
             for evt in self.game_events:
                 match evt:
                     case pygame.KEYDOWN, "up":
+
+                        self.sound_bank["bop"].play()
                         current_menu.item_up()
                     case pygame.KEYDOWN, "down":
+                        self.sound_bank["bop"].play()
                         current_menu.item_down()
                     case pygame.KEYDOWN, "return":
+                        self.sound_bank["bup"].play()
 
                         current_menu.functions[current_menu.current_item](self)
             self.game_events = []
@@ -219,8 +235,7 @@ class Pong():
             
             # paddle moves
 
-            # recalc paddle velocities (wtf)
-
+            # recalc paddle velocities
 
             #right paddle
             if (PS_P1_UP not in self.paddle_state) and (PS_P1_DOWN not in self.paddle_state):
@@ -264,12 +279,13 @@ class Pong():
 
             self.left_paddle += self.left_paddle_velocity
 
-
+            # cap paddle location
             self.right_paddle = min(self.right_paddle, 1.0 - self.paddle_relative_extend)
             self.right_paddle = max(self.right_paddle, self.paddle_relative_extend)
 
             self.left_paddle = min(self.left_paddle, 1.0 - self.paddle_relative_extend)
             self.left_paddle = max(self.left_paddle, self.paddle_relative_extend)
+
 
             # ball moves
             if self.round_started:
@@ -277,12 +293,14 @@ class Pong():
 
 
 
-            if self.round_frame == 5:
-                paddle_toball_velocity = 5
+            if self.round_frame == 12:
+                paddle_toball_velocity = 16
 
                 if self.round_started_right:
+                    self.sound_bank["bip"].play()
                     self.ball_velocity = np.array([-1,self.right_paddle_velocity*paddle_toball_velocity])
                 else:
+                    self.sound_bank["bop"].play()
                     self.ball_velocity = np.array([1,self.left_paddle_velocity*paddle_toball_velocity])
 
             else:
@@ -298,10 +316,12 @@ class Pong():
                     if self.in_paddle_left():
                         dist_tocenter = abs(self.left_paddle - self.ball_y )/(self.paddle_relative_extend)
 
-                        print(dist_tocenter)
+
                         self.ball_velocity[0] = np.abs(self.ball_velocity[0])
 
                         self.ball_velocity = self.ball_velocity * (1.0 + (dist_tocenter)/10)
+
+                        self.sound_bank["bop"].play()
                     else:
 
                         #credit score paddle_right
@@ -309,10 +329,15 @@ class Pong():
                         # reinit round
                         self.new_round_2P_game()
 
+
                 elif self.ball_x>1-ball_relative_thinkness:
 
                     if self.in_paddle_right():
+                        self.sound_bank["bip"].play()
+
+                        dist_tocenter = abs(self.left_paddle - self.ball_y) / (self.paddle_relative_extend)
                         self.ball_velocity[0] = - np.abs(self.ball_velocity[0])
+                        self.ball_velocity = self.ball_velocity * (1.0 + (dist_tocenter) / 10)
                     else:
 
                         #credit score
@@ -487,7 +512,7 @@ def main():
     game = Pong()
     game.init()
     game.debug_events = False
-    game.debug_overlay = True
+    game.debug_overlay = False
 
     target_loop_duration = 1.0 / 60
 
