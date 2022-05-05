@@ -1,5 +1,9 @@
 name: build_act
-on: "workflow_call"
+on:
+  push:
+    branches:
+      - master
+
 jobs:
   build_linux:
     runs-on: ubuntu-latest
